@@ -271,6 +271,7 @@ formatx(0,17)=".ahtm"
 	notemax2=notemax
 	repeat notemax2:arg1="":arg2="":noteget headerchks,cnt:instrs=instr(headerchks,0,": "):if instrs!-1{arg1="HTTP_"+strmid(headerchks,0,instrs):repeat strlen(arg1):arg1slice=peek(arg1,cnt):if arg1slice>='a' and arg1slice<='z'{arg1slice-=32}:if arg1slice='-'{arg1slice='_'}:poke arg1,cnt,arg1slice:loop:arg2=strmid(headerchks,instrs+2,strlen(headerchks)):SetEnvironmentVariable arg1,arg2}:loop
 	noteunsel
+	SetEnvironmentVariable "QUERY_STRING",""
 	indexphp=0:filename="":filenameslice="":getoptcontent=""
 	repeat getsize:if strmid(get,cnt,4)="GET "{gettagenable=1:SetEnvironmentVariable "REQUEST_METHOD","GET":continue cnt+4}:if strmid(get,cnt,5)="POST "{gettagenable=1:SetEnvironmentVariable "REQUEST_METHOD","POST":continue cnt+5}:filenameslice=strmid(get,cnt,1):if gettag2enable=1{getoptcontent+=filenameslice}:if filenameslice="?" and gettagenable=1{gettag2enable=1}:if gettagenable=1 and (filenameslice=" " or filenameslice="?" or filenameslice="#"){gettagenable=0}:if gettagenable=1{filename+=filenameslice}:if gettag2enable=1 and filenameslice=" " {gettag2enable=0:SetEnvironmentVariable "QUERY_STRING",getoptcontent}:loop:format=""
 	exist sharedfolder+""+filename:strsize2=strsize
