@@ -1,0 +1,297 @@
+#include "hsp3cl.as"
+#include"hspsock.as"
+
+	#uselib "kernel32.dll"
+	#func SetEnvironmentVariable "SetEnvironmentVariableA" sptr,sptr
+
+	#module
+	#uselib "kernel32.dll"
+	#cfunc CreateProcess "CreateProcessA" int,sptr,int,int,int,int,int,int,var,var
+	#cfunc WaitForSingleObject "WaitForSingleObject" int,int
+	#cfunc GetEnvironmentVariable "GetEnvironmentVariableA" var,var,int
+	#cfunc CreatePipe "CreatePipe" var,var,var,int
+	#cfunc CloseHandle "CloseHandle" int
+	#cfunc PeekNamedPipe "PeekNamedPipe" int,int,int,int,int,int
+	#cfunc ReadFile "ReadFile" int,var,int,var,int
+	#cfunc WriteFile "WriteFile" int,var,int,var,int
+	#define SW_HIDE	0
+	#define SW_SHOW	5
+	#deffunc consexec var prm1,str prm2
+	dosexcmd = prm2 : if strlen(dosexcmd)==0 : return -1
+	#define MAX_PATH	260
+	sdim cp,MAX_PATH+2
+	ev="Comspec"	
+	ret=GetEnvironmentVariable(ev,cp,MAX_PATH)
+	if ret==0 : return -1
+	filename=cp+" /c "+dosexcmd
+	#const MAX_BUF_SIZE	1024*1024
+	sdim szBuf,MAX_BUF_SIZE
+
+	sa=12,0,1 : ret=CreatePipe(hRead,hWrite,sa,MAX_BUF_SIZE)
+	;***** 子プロセスを作成 *****
+	#define STARTF_USESHOWWINDOW	1
+	#define STARTF_USESTDHANDLES	$00000100
+
+	dim lpsiStartInfo,17	;STARTUPINFO構造体
+	dim lppiProcInfo,4	;PROCESS_INFOMATION構造体
+	lpsiStartInfo(0)  = 68
+	lpsiStartInfo(11) = STARTF_USESTDHANDLES|STARTF_USESHOWWINDOW
+	lpsiStartInfo(12) = SW_HIDE
+	lpsiStartInfo(15) = hWrite
+	ret=CreateProcess(0,filename,0,0,1,0,0,0,lpsiStartInfo,lppiProcInfo)
+	if ret==0 : end
+
+
+	hprocess=lppiProcInfo(0)
+	ret=WaitForSingleObject(hprocess,$ffffffff)
+	ret=CloseHandle(hWrite)
+	rcvbuf=""	;Buffer Size HSP側で自動確保
+	repeat
+		await 10
+		;***** 標準出力パイプの内容を調べる *****
+		ret=PeekNamedPipe(hRead,0,0,0,dwStdOut,0)
+		ret=ReadFile(hRead,szBuf,4096,dwRead, 0)
+		if dwRead<4096 : memcpy szBuf, szBuf, dwRead, 0, 0 : poke szBuf, dwRead : rcvbuf+=szBuf : break
+		if dwRead==0 : break
+		rcvbuf+=szBuf
+	loop
+	prm1=rcvbuf
+	ret=CloseHandle(hRead)
+	sdim szBuf,0 : sdim cp,0 : sdim rcvbuf,0
+	return 0
+	#deffunc phpexec var prm1,str prm2,array prm3
+	dosexcmd = prm2 : if strlen(dosexcmd)==0 : return -1
+	sdim cp,MAX_PATH+2
+	ev="Comspec"	
+	ret=GetEnvironmentVariable(ev,cp,MAX_PATH)
+	if ret==0 : return -1
+	filename=cp+" /c "+dosexcmd
+	sdim szBuf,MAX_BUF_SIZE
+
+	sa=12,0,1 : ret=CreatePipe(hRead,hWrite,sa,MAX_BUF_SIZE)
+	sa=12,0,1 : ret=CreatePipe(hRead2,hWrite2,sa,MAX_BUF_SIZE)
+	;***** 子プロセスを作成 *****
+
+	dim lpsiStartInfo,17	;STARTUPINFO構造体
+	dim lppiProcInfo,4	;PROCESS_INFOMATION構造体
+	lpsiStartInfo(0)  = 68
+	lpsiStartInfo(11) = STARTF_USESTDHANDLES|STARTF_USESHOWWINDOW
+	lpsiStartInfo(12) = SW_HIDE
+	lpsiStartInfo(14) = hRead2
+	lpsiStartInfo(15) = hWrite
+	prm3x=prm3
+	dwWrite=0
+	ret=WriteFile(hWrite2,prm3x,varsize(prm3x),dwWrite,0)
+	ret=CreateProcess(0,filename,0,0,1,0,0,0,lpsiStartInfo,lppiProcInfo)
+	if ret==0 : return
+
+
+	hprocess=lppiProcInfo(0)
+	ret=WaitForSingleObject(hprocess,$ffffffff)
+	ret=CloseHandle(hWrite)
+	rcvbuf=""	;Buffer Size HSP側で自動確保
+	repeat
+		await 10
+		;***** 標準出力パイプの内容を調べる *****
+		ret=PeekNamedPipe(hRead,0,0,0,dwStdOut,0)
+		ret=ReadFile(hRead,szBuf,4096,dwRead, 0)
+		if dwRead<4096 : memcpy szBuf, szBuf, dwRead, 0, 0 : poke szBuf, dwRead : rcvbuf+=szBuf : break
+		if dwRead==0 : break
+		rcvbuf+=szBuf
+	loop
+	prm1=rcvbuf
+	ret=CloseHandle(hRead)
+	sdim szBuf,0 : sdim cp,0 : sdim rcvbuf,0
+	return 0
+	#global
+
+sharedfolder=dir_cur+"/pub"
+
+;charset="shift-jis"
+charset="UTF-8"
+
+ipget:mes refstr
+
+sdim put,65536
+put += "HTTP/1.1 200 OK\n"
+put += "Content-Type: text/html;charset="+charset+"\n" ;文字コードをついでに指定
+put += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+put += "<!DOCTYPE html>\n"
+put += "<html>\n"
+put += "<head>\n"
+put += "<title>helloHTML</title>\n"
+put += "</head>\n"
+put += "<body>\n"
+put += "Hello\n"
+put += "</body>\n"
+put += "</html>"
+
+sdim header,4096,256
+sdim formatx,256,16,256
+
+header(0) += "HTTP/1.1 200 OK\n"
+header(0) += "Content-Type: text/html;charset="+charset+"\n" ;文字コードをついでに指定
+header(0) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+//====imagefile====
+
+header(1) += "HTTP/1.1 200 OK\n"
+header(1) += "Content-Type: image/apng\n" ;文字コードをついでに指定
+header(1) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(2) += "HTTP/1.1 200 OK\n"
+header(2) += "Content-Type: image/avif\n" ;文字コードをついでに指定
+header(2) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(3) += "HTTP/1.1 200 OK\n"
+header(3) += "Content-Type: image/gif\n" ;文字コードをついでに指定
+header(3) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(4) += "HTTP/1.1 200 OK\n"
+header(4) += "Content-Type: image/jpeg\n" ;文字コードをついでに指定
+header(4) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(5) += "HTTP/1.1 200 OK\n"
+header(5) += "Content-Type: image/png\n" ;文字コードをついでに指定
+header(5) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(6) += "HTTP/1.1 200 OK\n"
+header(6) += "Content-Type: image/svg+xml\n" ;文字コードをついでに指定
+header(6) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(7) += "HTTP/1.1 200 OK\n"
+header(7) += "Content-Type: image/webp\n" ;文字コードをついでに指定
+header(7) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+//====audio visual====
+
+header(8) += "HTTP/1.1 200 OK\n"
+header(8) += "Content-Type: audio/wave\n" ;文字コードをついでに指定
+header(8) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(9) += "HTTP/1.1 200 OK\n"
+header(9) += "Content-Type: audio/webm\n" ;文字コードをついでに指定
+header(9) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(10) += "HTTP/1.1 200 OK\n"
+header(10) += "Content-Type: video/webm\n" ;文字コードをついでに指定
+header(10) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(11) += "HTTP/1.1 200 OK\n"
+header(11) += "Content-Type: audio/ogg\n" ;文字コードをついでに指定
+header(11) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(12) += "HTTP/1.1 200 OK\n"
+header(12) += "Content-Type: video/ogg\n" ;文字コードをついでに指定
+header(12) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(13) += "HTTP/1.1 200 OK\n"
+header(13) += "Content-Type: application/ogg\n" ;文字コードをついでに指定
+header(13) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+//====js css text====
+header(14) += "HTTP/1.1 200 OK\n"
+header(14) += "Content-Type: text/javascript\n" ;文字コードをついでに指定
+header(14) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(15) += "HTTP/1.1 200 OK\n"
+header(15) += "Content-Type: text/css\n" ;文字コードをついでに指定
+header(15) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(16) += "HTTP/1.1 200 OK\n"
+header(16) += "Content-Type: text/plain\n" ;文字コードをついでに指定
+header(16) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+header(17) += "HTTP/1.1 200 OK\n"
+header(17) += "Content-Type: text/html\n" ;文字コードをついでに指定
+header(17) += "Connection: Close\n\n" ;HTTPヘッダーの最後は改行x2
+
+/*
+html
+apng
+avif
+gif
+jpeg/jpg
+png
+svg
+webp
+wave/wav
+webm(audio)
+webm(video)
+ogg(audio)
+ogg(video)
+ogg(application)
+js
+css
+txt
+html(english)
+*/
+
+formatx(0,0)=".html"
+formatx(1,0)=".htm"
+formatx(2,0)=".shtml"
+formatx(3,0)=".shtm"
+formatx(0,1)=".apng"
+formatx(0,2)=".avif"
+formatx(0,3)=".gif"
+formatx(0,4)=".jpeg"
+formatx(1,4)=".jpg"
+formatx(2,4)=".jfif"
+formatx(3,4)=".pjpeg"
+formatx(4,4)=".pjp"
+formatx(0,5)=".png"
+formatx(0,6)=".svg"
+formatx(0,7)=".webp"
+formatx(0,8)=".wav"
+formatx(0,10)=".webm"
+formatx(0,11)=".ogg"
+formatx(0,12)=".ogv"
+formatx(0,13)=".oga"
+formatx(0,14)=".js"
+formatx(0,15)=".css"
+formatx(0,16)=".txt"
+formatx(0,17)=".ahtm"
+
+*main
+	sockmake 1,80
+	//if(stat!0){mes"Error":end}else{mes"MadeServer"}
+
+	repeat
+		sockwait 1
+		if(stat=0):break
+		if(stat>1){errorenable=1:break}
+		await
+	loop
+	if errorenable=0{
+	sdim get,65536
+	sockget get,65536,1
+	getsize=strlen(get)
+	notesel get
+	notemax2=notemax
+	repeat notemax2:arg1="":arg2="":noteget headerchks,cnt:instrs=instr(headerchks,0,": "):if instrs!-1{arg1="HTTP_"+strmid(headerchks,0,instrs):repeat strlen(arg1):arg1slice=peek(arg1,cnt):if arg1slice>='a' and arg1slice<='z'{arg1slice-=32}:if arg1slice='-'{arg1slice='_'}:poke arg1,cnt,arg1slice:loop:arg2=strmid(headerchks,instrs+2,strlen(headerchks)):SetEnvironmentVariable arg1,arg2}:loop
+	noteunsel
+	filename="":filenameslice="":getoptcontent=""
+	repeat getsize:if strmid(get,cnt,4)="GET "{gettagenable=1:SetEnvironmentVariable "REQUEST_METHOD","GET":continue cnt+4}:if strmid(get,cnt,5)="POST "{gettagenable=1:SetEnvironmentVariable "REQUEST_METHOD","POST":continue cnt+5}:filenameslice=strmid(get,cnt,1):if gettag2enable=1{getoptcontent+=filenameslice}:if filenameslice="?" and gettagenable=1{gettag2enable=1}:if gettagenable=1 and (filenameslice=" " or filenameslice="?" or filenameslice="#"){gettagenable=0}:if gettagenable=1{filename+=filenameslice}:if gettag2enable=1 and filenameslice=" " {gettag2enable=0:SetEnvironmentVariable "QUERY_STRING",getoptcontent}:loop:format=""
+	exist sharedfolder+""+filename:strsize2=strsize
+	if strsize2!-1{sdim put,strsize2:bload sharedfolder+""+filename,put:format=getpath(filename,8+2)}else{
+	exist sharedfolder+""+filename+"/index.html":strsize2=strsize
+	if strsize2!-1{sdim put,strsize2:bload sharedfolder+""+filename+"/index.html",put:format=".html"}else{
+	exist sharedfolder+"/404.html":strsize2=strsize
+	if strsize2!-1{sdim put,strsize2:bload sharedfolder+"/404.html",put:format=".html"}else{strsize2=256:sdim put,strsize2}
+	}
+	}
+	repeat strlen(format):formatbite=peek(format,cnt):if formatbite>='A' and formatbite<='Z'{formatbite+=32}:poke format,cnt,formatbite:loop
+	exist dir_cur+"/plugins/php/php-cgi.exe"
+	if format=".php" and strsize!-1{dir_curbak="":dir_curbak=dir_cur:chdir getpath(sharedfolder+""+filename,32):puts="":SetEnvironmentVariable "SCRIPT_FILENAME",sharedfolder+""+filename:phpexec puts,dir_curbak+"/plugins/php/php-cgi.exe",get:sdim putsa,1024:putsa += "HTTP/1.1 200 OK\n":putsa += "Connection: Close\n":strsize2=varsize(puts)+strlen(putsa):sdim putsab,strsize2:memcpy putsab,putsa,strlen(putsa),0,0:memcpy putsab,puts,varsize(puts),strlen(putsa),0:sockputb putsab,0,strsize2,1:chdir dir_curbak}else{
+	formatid=-1:repeat 256:for cntx,0,16,1:if formatx(cntx,cnt)=format{formatid=cnt:_break}:next:if formatid!-1{break}:loop:if formatid=-1{formatid=0}
+	sdim puts,strlen(header(formatid))+strsize2
+	memcpy puts,header(formatid),strlen(header(formatid)),0,0
+	memcpy puts,put,strsize2,strlen(header(formatid)),0
+	sockputb puts,0,strlen(header(formatid))+strsize2,1
+	if(stat!0):mes"Error"
+	}
+	}
+	errorenable=0
+	sockclose 1
+	goto *main
